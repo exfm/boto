@@ -31,6 +31,7 @@ Currently Supported Services
 * **Deployment and Management**
 
   * CloudFormation -- (:doc:`API Reference <ref/cloudformation>`)
+  * Elastic Beanstalk -- (:doc:`API Reference <ref/beanstalk>`)
 
 * **Identity & Access**
 
@@ -42,6 +43,7 @@ Currently Supported Services
   * :doc:`Simple Queue Service (SQS) <sqs_tut>` -- (:doc:`API Reference <ref/sqs>`)
   * Simple Notification Service (SNS) -- (:doc:`API Reference <ref/sns>`)
   * :doc:`Simple Email Service (SES) <ses_tut>` -- (:doc:`API Reference <ref/ses>`)
+  * :doc:`Cloudsearch <cloudsearch_tut>` -- (:doc:`API Reference <ref/cloudsearch>`)
 
 * **Monitoring**
 
@@ -60,6 +62,7 @@ Currently Supported Services
 * **Storage**
 
   * :doc:`Simple Storage Service (S3) <s3_tut>` -- (:doc:`API Reference <ref/s3>`)
+  * Amazon Glacier -- (:doc:`API Reference <ref/glacier>`)
   * Google Cloud Storage -- (:doc:`API Reference <ref/gs>`)
 
 * **Workforce**
@@ -70,6 +73,7 @@ Additional Resources
 --------------------
 
 * :doc:`Boto Config Tutorial <boto_config_tut>`
+* :doc:`Contributing to Boto <contributing>`
 * `Boto Source Repository`_
 * `Boto Issue Tracker`_
 * `Boto Twitter`_
@@ -107,6 +111,8 @@ Additional Resources
    ref/sns
    ses_tut
    ref/ses
+   cloudsearch_tut
+   ref/cloudsearch
    cloudwatch_tut
    ref/cloudwatch
    ref/route53
@@ -129,4 +135,3 @@ Indices and tables
 * :ref:`genindex`
 * :ref:`modindex`
 * :ref:`search`
-

@@ -250,8 +250,8 @@ class Constraint(object):
     def get_attributes(self):
         pairs = zip(self.attribute_names, self.attribute_values)
         attrs = ' '.join(
-            '%s="%d"' % (name,value)
-            for (name,value) in pairs
+            '%s="%d"' % (name, value)
+            for (name, value) in pairs
             if value is not None
             )
         return attrs
@@ -280,6 +280,15 @@ class RegExConstraint(Constraint):
 
     def __init__(self, pattern, error_text=None, flags=None):
         self.attribute_values = pattern, error_text, flags
+
+    def get_attributes(self):
+        pairs = zip(self.attribute_names, self.attribute_values)
+        attrs = ' '.join(
+            '%s="%s"' % (name, value)
+            for (name, value) in pairs
+            if value is not None
+            )
+        return attrs
 
 class NumberOfLinesSuggestion(object):
     template = '<NumberOfLinesSuggestion>%(num_lines)s</NumberOfLinesSuggestion>'
@@ -379,7 +388,7 @@ class SelectionAnswer(object):
         if self.other:
             # add OtherSelection element as xml if available
             if hasattr(self.other, 'get_as_xml'):
-                assert type(self.other) == FreeTextAnswer, 'OtherSelection can only be a FreeTextAnswer'
+                assert isinstance(self.other, FreeTextAnswer), 'OtherSelection can only be a FreeTextAnswer'
                 selections_xml += self.other.get_as_xml().replace('FreeTextAnswer', 'OtherSelection')
             else:
                 selections_xml += "<OtherSelection />"

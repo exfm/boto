@@ -70,11 +70,18 @@ class Layer1(AWSAuthConnection):
     SessionExpiredError = 'com.amazon.coral.service#ExpiredTokenException'
     """The error response returned when session token has expired"""
 
+    ConditionalCheckFailedError = 'ConditionalCheckFailedException'
+    """The error response returned when a conditional check fails"""
+
+    ValidationError = 'ValidationException'
+    """The error response returned when an item is invalid in some way"""
+
     ResponseError = DynamoDBResponseError
 
     def __init__(self, aws_access_key_id=None, aws_secret_access_key=None,
                  is_secure=True, port=None, proxy=None, proxy_port=None,
-                 host=None, debug=0, session_token=None, region=None):
+                 debug=0, security_token=None, region=None,
+                 validate_certs=True):
         if not region:
             region_name = boto.config.get('DynamoDB', 'region',
                                           self.DefaultRegionName)
@@ -84,37 +91,20 @@ class Layer1(AWSAuthConnection):
                     break
 
         self.region = region
-        self._passed_access_key = aws_access_key_id
-        self._passed_secret_key = aws_secret_access_key
-        if not session_token:
-            session_token = self._get_session_token()
-        self.creds = session_token
-        self.throughput_exceeded_events = 0
-        self.request_id = None
-        self.instrumentation = {'times': [], 'ids': []}
-        self.do_instrumentation = False
         AWSAuthConnection.__init__(self, self.region.endpoint,
-                                   self.creds.access_key,
-                                   self.creds.secret_key,
+                                   aws_access_key_id,
+                                   aws_secret_access_key,
                                    is_secure, port, proxy, proxy_port,
-                                   debug=debug,
-                                   security_token=self.creds.session_token)
-
-    def _update_provider(self):
-        self.provider = Provider('aws',
-                                 self.creds.access_key,
-                                 self.creds.secret_key,
-                                 self.creds.session_token)
-        self._auth_handler.update_provider(self.provider)
+                                   debug=debug, security_token=security_token,
+                                   validate_certs=validate_certs)
+        self.throughput_exceeded_events = 0
 
     def _get_session_token(self):
-        boto.log.debug('Creating new Session Token')
-        sts = boto.connect_sts(self._passed_access_key,
-                               self._passed_secret_key)
-        return sts.get_session_token()
+        self.provider = Provider(self._provider_type)
+        self._auth_handler.update_provider(self.provider)
 
     def _required_auth_capability(self):
-        return ['hmac-v3-http']
+        return ['hmac-v4']
 
     def make_request(self, action, body='', object_hook=None):
         """
@@ -122,20 +112,20 @@ class Layer1(AWSAuthConnection):
         """
         headers = {'X-Amz-Target': '%s_%s.%s' % (self.ServiceName,
                                                  self.Version, action),
+                   'Host': self.region.endpoint,
                    'Content-Type': 'application/x-amz-json-1.0',
                    'Content-Length': str(len(body))}
         http_request = self.build_base_http_request('POST', '/', '/',
                                                     {}, headers, body, None)
-        if self.do_instrumentation:
-            start = time.time()
+        start = time.time()
         response = self._mexe(http_request, sender=None,
                               override_num_retries=10,
                               retry_handler=self._retry_handler)
-        self.request_id = response.getheader('x-amzn-RequestId')
-        boto.log.debug('RequestId: %s' % self.request_id)
-        if self.do_instrumentation:
-            self.instrumentation['times'].append(time.time() - start)
-            self.instrumentation['ids'].append(self.request_id)
+        elapsed = (time.time() - start)*1000
+        request_id = response.getheader('x-amzn-RequestId')
+        boto.log.debug('RequestId: %s' % request_id)
+        boto.perflog.info('%s: id=%s time=%sms',
+                          headers['X-Amz-Target'], request_id, int(elapsed))
         response_body = response.read()
         boto.log.debug(response_body)
         return json.loads(response_body, object_hook=object_hook)
@@ -157,9 +147,14 @@ class Layer1(AWSAuthConnection):
                 status = (msg, i, next_sleep)
             elif self.SessionExpiredError in data.get('__type'):
                 msg = 'Renewing Session Token'
-                self.creds = self._get_session_token()
-                self._update_provider()
-                status = (msg, i + self.num_retries - 1, next_sleep)
+                self._get_session_token()
+                status = (msg, i + self.num_retries - 1, 0)
+            elif self.ConditionalCheckFailedError in data.get('__type'):
+                raise dynamodb_exceptions.DynamoDBConditionalCheckFailedError(
+                    response.status, response.reason, data)
+            elif self.ValidationError in data.get('__type'):
+                raise dynamodb_exceptions.DynamoDBValidationError(
+                    response.status, response.reason, data)
             else:
                 raise self.ResponseError(response.status, response.reason,
                                          data)
@@ -310,9 +305,26 @@ class Layer1(AWSAuthConnection):
         :param request_items: A Python version of the RequestItems
             data structure defined by DynamoDB.
         """
+        # If the list is empty, return empty response
+        if not request_items:
+            return {}
         data = {'RequestItems': request_items}
         json_input = json.dumps(data)
         return self.make_request('BatchGetItem', json_input,
+                                 object_hook=object_hook)
+
+    def batch_write_item(self, request_items, object_hook=None):
+        """
+        This operation enables you to put or delete several items
+        across multiple tables in a single API call.
+
+        :type request_items: dict
+        :param request_items: A Python version of the RequestItems
+            data structure defined by DynamoDB.
+        """
+        data = {'RequestItems': request_items}
+        json_input = json.dumps(data)
+        return self.make_request('BatchWriteItem', json_input,
                                  object_hook=object_hook)
 
     def put_item(self, table_name, item,
